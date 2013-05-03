@@ -4,7 +4,7 @@
   "description": "Conductor.js is a library, built on top of Oasis.js, for embedding untrusted rich content that can still participate in a larger ecosystem.",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "grunt qunit"
   },
   "repository": {
     "type": "git",
@@ -21,6 +21,7 @@
     "grunt-contrib-connect": "~0.1.2",
     "grunt-contrib-watch": "~0.2.0",
     "grunt-contrib-jshint": "~0.4.3",
-    "gfms": "0.0.7"
+    "gfms": "0.0.7",
+    "grunt-contrib-qunit": "~0.2.1"
   }
 }

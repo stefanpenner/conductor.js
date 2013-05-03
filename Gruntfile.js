@@ -106,6 +106,10 @@ module.exports = function(grunt) {
         jshintrc: './.jshintrc'
       },
       all: ['Gruntfile.js', 'lib/**/*.js', 'test/tests/**/*.js']
+    },
+
+    qunit: {
+      all: ['test/**/*.html']
     }
   });
 
@@ -115,6 +119,7 @@ module.exports = function(grunt) {
   grunt.loadNpmTasks('grunt-contrib-connect');
   grunt.loadNpmTasks('grunt-contrib-watch');
   grunt.loadNpmTasks('grunt-contrib-jshint');
+  grunt.loadNpmTasks('grunt-contrib-qunit');
 
   // Multi-task for es6-module-transpiler
   this.registerMultiTask('transpile', "Transpile ES6 modules into AMD, CJS or globals", function() {
