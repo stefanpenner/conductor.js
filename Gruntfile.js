@@ -112,7 +112,13 @@ module.exports = function(grunt) {
     },
 
     qunit: {
-      all: ['test/**/*.html']
+      all: {
+        options: {
+          urls: [
+            'http://localhost:9292/test/index.html'
+          ]
+        }
+      }
     }
   });
 
