@@ -18,7 +18,7 @@ module.exports = function(grunt) {
   this.registerTask('server', ['concat:tests', 'build-dev', 'connect', 'watch']);
 
   // Travis CI task.
-  grunt.registerTask('travis', 'qunit');
+  grunt.registerTask('travis', ['jshint', 'qunit']);
 
   this.registerTask('tutorial:retag', function () {
     var done = this.async();
