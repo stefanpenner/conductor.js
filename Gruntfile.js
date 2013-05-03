@@ -17,6 +17,9 @@ module.exports = function(grunt) {
   // Run a server. This is ideal for running the QUnit tests in the browser.
   this.registerTask('server', ['concat:tests', 'build-dev', 'connect', 'watch']);
 
+  // Travis CI task.
+  grunt.registerTask('travis', 'qunit');
+
   this.registerTask('tutorial:retag', function () {
     var done = this.async();
 
