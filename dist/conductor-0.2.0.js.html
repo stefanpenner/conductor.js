@@ -1338,65 +1338,82 @@ function UUID(){}UUID.generate=function(){var a=UUID._gri,b=UUID._ha;return b(a(
 })(this);
 
 define("rsvp/all",
-  ["rsvp/defer","exports"],
+  ["rsvp/promise","exports"],
   function(__dependency1__, __exports__) {
     "use strict";
-    var defer = __dependency1__.defer;
+    var Promise = __dependency1__.Promise;
+    /* global toString */
+
 
     function all(promises) {
-      var results = [], deferred = defer(), remaining = promises.length;
-
-      if (remaining === 0) {
-        deferred.resolve([]);
+      if (Object.prototype.toString.call(promises) !== "[object Array]") {
+        throw new TypeError('You must pass an array to all.');
       }
 
-      var resolver = function(index) {
-        return function(value) {
-          resolveAll(index, value);
-        };
-      };
+      return new Promise(function(resolve, reject) {
+        var results = [], remaining = promises.length,
+        promise;
 
-      var resolveAll = function(index, value) {
-        results[index] = value;
-        if (--remaining === 0) {
-          deferred.resolve(results);
+        if (remaining === 0) {
+          resolve([]);
         }
-      };
 
-      var rejectAll = function(error) {
-        deferred.reject(error);
-      };
-
-      for (var i = 0; i < promises.length; i++) {
-        if (promises[i] && typeof promises[i].then === 'function') {
-          promises[i].then(resolver(i), rejectAll);
-        } else {
-          resolveAll(i, promises[i]);
+        function resolver(index) {
+          return function(value) {
+            resolveAll(index, value);
+          };
         }
-      }
-      return deferred.promise;
+
+        function resolveAll(index, value) {
+          results[index] = value;
+          if (--remaining === 0) {
+            resolve(results);
+          }
+        }
+
+        for (var i = 0; i < promises.length; i++) {
+          promise = promises[i];
+
+          if (promise && typeof promise.then === 'function') {
+            promise.then(resolver(i), reject);
+          } else {
+            resolveAll(i, promise);
+          }
+        }
+      });
     }
+
 
     __exports__.all = all;
   });
-
 define("rsvp/async",
   ["exports"],
   function(__exports__) {
     "use strict";
     var browserGlobal = (typeof window !== 'undefined') ? window : {};
-
     var BrowserMutationObserver = browserGlobal.MutationObserver || browserGlobal.WebKitMutationObserver;
     var async;
 
-    if (typeof process !== 'undefined' &&
-      {}.toString.call(process) === '[object process]') {
-      async = function(callback, binding) {
+    // old node
+    function useNextTick() {
+      return function(callback, arg) {
         process.nextTick(function() {
-          callback.call(binding);
+          callback(arg);
         });
       };
-    } else if (BrowserMutationObserver) {
+    }
+
+    // node >= 0.10.x
+    function useSetImmediate() {
+      return function(callback, arg) {
+        /* global  setImmediate */
+        setImmediate(function(){
+          callback(arg);
+        });
+      };
+    }
+
+    function useMutationObserver() {
       var queue = [];
 
       var observer = new BrowserMutationObserver(function() {
@@ -1404,8 +1421,8 @@ define("rsvp/async",
         queue = [];
 
         toProcess.forEach(function(tuple) {
-          var callback = tuple[0], binding = tuple[1];
-          callback.call(binding);
+          var callback = tuple[0], arg= tuple[1];
+          callback(arg);
         });
       });
 
@@ -1416,24 +1433,35 @@ define("rsvp/async",
       window.addEventListener('unload', function(){
         observer.disconnect();
         observer = null;
-      });
+      }, false);
 
-      async = function(callback, binding) {
-        queue.push([callback, binding]);
+      return function(callback, arg) {
+        queue.push([callback, arg]);
         element.setAttribute('drainQueue', 'drainQueue');
       };
-    } else {
-      async = function(callback, binding) {
+    }
+
+    function useSetTimeout() {
+      return function(callback, arg) {
         setTimeout(function() {
-          callback.call(binding);
+          callback(arg);
         }, 1);
       };
+    }
+
+    if (typeof setImmediate === 'function') {
+      async = useSetImmediate();
+    } else if (typeof process !== 'undefined' && {}.toString.call(process) === '[object process]') {
+      async = useNextTick();
+    } else if (BrowserMutationObserver) {
+      async = useMutationObserver();
+    } else {
+      async = useSetTimeout();
     }
 
 
     __exports__.async = async;
   });
-
 define("rsvp/config",
   ["rsvp/async","exports"],
   function(__dependency1__, __exports__) {
@@ -1443,30 +1471,34 @@ define("rsvp/config",
     var config = {};
     config.async = async;
 
+
     __exports__.config = config;
   });
-
 define("rsvp/defer",
   ["rsvp/promise","exports"],
   function(__dependency1__, __exports__) {
     "use strict";
     var Promise = __dependency1__.Promise;
 
-    function defer() {
-      var deferred = {};
+    function defer(label) {
+      var deferred = {
+        // pre-allocate shape
+        resolve: undefined,
+        reject:  undefined,
+        promise: undefined
+      };
 
-      var promise = new Promise(function(resolve, reject) {
+      deferred.promise = new Promise(function(resolve, reject) {
         deferred.resolve = resolve;
         deferred.reject = reject;
-      });
+      }, label);
 
-      deferred.promise = promise;
       return deferred;
     }
 
+
     __exports__.defer = defer;
   });
-
 define("rsvp/events",
   ["exports"],
   function(__exports__) {
@@ -1568,7 +1600,6 @@ define("rsvp/events",
 
     __exports__.EventTarget = EventTarget;
   });
-
 define("rsvp/hash",
   ["rsvp/defer","exports"],
   function(__dependency1__, __exports__) {
@@ -1576,13 +1607,13 @@ define("rsvp/hash",
     var defer = __dependency1__.defer;
 
     function size(object) {
-      var size = 0;
+      var s = 0;
 
       for (var prop in object) {
-        size++;
+        s++;
       }
 
-      return size;
+      return s;
     }
 
     function hash(promises) {
@@ -1620,9 +1651,9 @@ define("rsvp/hash",
       return deferred.promise;
     }
 
+
     __exports__.hash = hash;
   });
-
 define("rsvp/node",
   ["rsvp/promise","rsvp/all","exports"],
   function(__dependency1__, __dependency2__, __exports__) {
@@ -1645,6 +1676,7 @@ define("rsvp/node",
     function denodeify(nodeFunc) {
       return function()  {
         var nodeArgs = Array.prototype.slice.call(arguments), resolve, reject;
+        var thisArg = this;
 
         var promise = new Promise(function(nodeResolve, nodeReject) {
           resolve = nodeResolve;
@@ -1655,7 +1687,7 @@ define("rsvp/node",
           nodeArgs.push(makeNodeCallbackFor(resolve, reject));
 
           try {
-            nodeFunc.apply(this, nodeArgs);
+            nodeFunc.apply(thisArg, nodeArgs);
           } catch(e) {
             reject(e);
           }
@@ -1665,9 +1697,9 @@ define("rsvp/node",
       };
     }
 
+
     __exports__.denodeify = denodeify;
   });
-
 define("rsvp/promise",
   ["rsvp/config","rsvp/events","exports"],
   function(__dependency1__, __dependency2__, __exports__) {
@@ -1675,11 +1707,22 @@ define("rsvp/promise",
     var config = __dependency1__.config;
     var EventTarget = __dependency2__.EventTarget;
 
-    var noop = function() {};
+    function objectOrFunction(x) {
+      return isFunction(x) || (typeof x === "object" && x !== null);
+    }
 
-    var Promise = function(resolver) {
+    function isFunction(x){
+      return typeof x === "function";
+    }
+
+    var guidKey = 'rsvp_' + new Date().getTime();
+    var promiseIndex= 0;
+
+    var Promise = function(resolver, label) {
       var promise = this,
       resolved = false;
+
+      this._label = label;
 
       if (typeof resolver !== 'function') {
         throw new TypeError('You must pass a resolver function as the sole argument to the promise constructor');
@@ -1703,17 +1746,52 @@ define("rsvp/promise",
 
       this.on('promise:resolved', function(event) {
         this.trigger('success', { detail: event.detail });
-      }, this);
+
+        this.constructor.trigger('fulfilled', {
+          guid: this._guid,
+          value: event.detail,
+          eventName: 'fulfilled',
+          label: this._label
+        });
+     }, this);
 
       this.on('promise:failed', function(event) {
         this.trigger('error', { detail: event.detail });
+
+        this.constructor.trigger('rejected', {
+          guid: this._guid,
+          reason: event.detail,
+          eventName: 'rejected',
+          label: this._label
+        });
       }, this);
 
-      resolver(resolvePromise, rejectPromise);
+
+      this.on('error', onerror);
+
+      this._guid = guidKey + '-' + promiseIndex++;
+
+      this.constructor.trigger('created', {
+        guid: this._guid,
+        eventName: 'created',
+        label: this._label
+      });
+
+      try {
+        resolver(resolvePromise, rejectPromise);
+      } catch(e) {
+        rejectPromise(e);
+      }
     };
 
+    function onerror(event) {
+      if (config.onerror) {
+        config.onerror(event.detail);
+      }
+    }
+
     var invokeCallback = function(type, promise, callback, event) {
-      var hasCallback = typeof callback === 'function',
+      var hasCallback = isFunction(callback),
           value, error, succeeded, failed;
 
       if (hasCallback) {
@@ -1729,12 +1807,8 @@ define("rsvp/promise",
         succeeded = true;
       }
 
-      if (value && typeof value.then === 'function') {
-        value.then(function(value) {
-          resolve(promise, value);
-        }, function(error) {
-          reject(promise, error);
-        });
+      if (handleThenable(promise, value)) {
+        return;
       } else if (hasCallback && succeeded) {
         resolve(promise, value);
       } else if (failed) {
@@ -1747,20 +1821,30 @@ define("rsvp/promise",
     };
 
     Promise.prototype = {
+      _guid: undefined,
+      _label: undefined,
       constructor: Promise,
 
+      isRejected: undefined,
+      isFulfilled: undefined,
+      rejectedReason: undefined,
+      fulfillmentValue: undefined,
+
       then: function(done, fail) {
-        var thenPromise = new Promise(function() {});
+        this.off('error', onerror);
+
+        var label = "" + (this._label || 'unlabeled') + " > ";
+        var thenPromise = new this.constructor(function() {}, label);
 
         if (this.isFulfilled) {
-          config.async(function() {
-            invokeCallback('resolve', thenPromise, done, { detail: this.fulfillmentValue });
+          config.async(function(promise) {
+            invokeCallback('resolve', thenPromise, done, { detail: promise.fulfillmentValue });
           }, this);
         }
 
         if (this.isRejected) {
-          config.async(function() {
-            invokeCallback('reject', thenPromise, fail, { detail: this.rejectedReason });
+          config.async(function(promise) {
+            invokeCallback('reject', thenPromise, fail, { detail: promise.rejectedReason });
           }, this);
         }
 
@@ -1772,22 +1856,70 @@ define("rsvp/promise",
           invokeCallback('reject', thenPromise, fail, event);
         });
 
+        this.constructor.trigger('chained', {
+          parent: this._guid,
+          child: thenPromise._guid,
+          eventName: 'chained',
+          label: this._label
+        });
+
         return thenPromise;
+      },
+
+      fail: function(fail) {
+        return this.then(null, fail);
       }
     };
 
+    EventTarget.mixin(Promise); // instrumentation
     EventTarget.mixin(Promise.prototype);
 
     function resolve(promise, value) {
-      if (value && typeof value.then === 'function') {
-        value.then(function(val) {
-          resolve(promise, val);
-        }, function(val) {
-          reject(promise, val);
-        });
-      } else {
+      if (promise === value) {
+        fulfill(promise, value);
+      } else if (!handleThenable(promise, value)) {
         fulfill(promise, value);
       }
+    }
+
+    function handleThenable(promise, value) {
+      var then = null,
+      resolved;
+
+      try {
+        if (promise === value) {
+          throw new TypeError("A promises callback cannot return that same promise.");
+        }
+
+        if (objectOrFunction(value)) {
+          then = value.then;
+
+          if (isFunction(then)) {
+            then.call(value, function(val) {
+              if (resolved) { return true; }
+              resolved = true;
+
+              if (value !== val) {
+                resolve(promise, val);
+              } else {
+                fulfill(promise, val);
+              }
+            }, function(val) {
+              if (resolved) { return true; }
+              resolved = true;
+
+              reject(promise, val);
+            });
+
+            return true;
+          }
+        }
+      } catch (error) {
+        reject(promise, error);
+        return true;
+      }
+
+      return false;
     }
 
     function fulfill(promise, value) {
@@ -1809,51 +1941,39 @@ define("rsvp/promise",
 
     __exports__.Promise = Promise;
   });
+define("rsvp/reject",
+  ["rsvp/promise","exports"],
+  function(__dependency1__, __exports__) {
+    "use strict";
+    var Promise = __dependency1__.Promise;
 
+    function reject(reason) {
+      return new Promise(function (resolve, reject) {
+        reject(reason);
+      });
+    }
+
+
+    __exports__.reject = reject;
+  });
 define("rsvp/resolve",
   ["rsvp/promise","exports"],
   function(__dependency1__, __exports__) {
     "use strict";
     var Promise = __dependency1__.Promise;
 
-
-    function objectOrFunction(x) {
-      return typeof x === "function" || (typeof x === "object" && x !== null);
-    }
-
-    function resolve(thenable){
-      var promise = new Promise(function(resolve, reject){
-        var then;
-
-        try {
-          if ( objectOrFunction(thenable) ) {
-            then = thenable.then;
-
-            if (typeof then === "function") {
-              then.call(thenable, resolve, reject);
-            } else {
-              resolve(thenable);
-            }
-
-          } else {
-            resolve(thenable);
-          }
-
-        } catch(error) {
-          reject(error);
-        }
-      });
-
-      return promise;
+    function resolve(thenable, label) {
+      return new Promise(function(resolve, reject) {
+        resolve(thenable);
+      }, label);
     }
 
 
     __exports__.resolve = resolve;
   });
-
 define("rsvp",
-  ["rsvp/events","rsvp/promise","rsvp/node","rsvp/all","rsvp/hash","rsvp/defer","rsvp/config","rsvp/resolve","exports"],
-  function(__dependency1__, __dependency2__, __dependency3__, __dependency4__, __dependency5__, __dependency6__, __dependency7__, __dependency8__, __exports__) {
+  ["rsvp/events","rsvp/promise","rsvp/node","rsvp/all","rsvp/hash","rsvp/defer","rsvp/config","rsvp/resolve","rsvp/reject","exports"],
+  function(__dependency1__, __dependency2__, __dependency3__, __dependency4__, __dependency5__, __dependency6__, __dependency7__, __dependency8__, __dependency9__, __exports__) {
     "use strict";
     var EventTarget = __dependency1__.EventTarget;
     var Promise = __dependency2__.Promise;
@@ -1863,6 +1983,7 @@ define("rsvp",
     var defer = __dependency6__.defer;
     var config = __dependency7__.config;
     var resolve = __dependency8__.resolve;
+    var reject = __dependency9__.reject;
 
     function configure(name, value) {
       config[name] = value;
@@ -1877,11 +1998,11 @@ define("rsvp",
     __exports__.denodeify = denodeify;
     __exports__.configure = configure;
     __exports__.resolve = resolve;
+    __exports__.reject = reject;
   });
-
 define("oasis",
-  ["oasis/util","oasis/config","oasis/connect","rsvp","oasis/logger","oasis/version","oasis/state","oasis/sandbox","oasis/sandbox_init","oasis/service","oasis/iframe_adapter","oasis/webworker_adapter"],
-  function(__dependency1__, __dependency2__, __dependency3__, RSVP, logger, Version, state, Sandbox, initializeSandbox, Service, iframeAdapter, webworkerAdapter) {
+  ["oasis/util","oasis/config","oasis/connect","rsvp","oasis/logger","oasis/version","oasis/state","oasis/sandbox","oasis/sandbox_init","oasis/service","oasis/iframe_adapter","oasis/webworker_adapter","oasis/inline_adapter"],
+  function(__dependency1__, __dependency2__, __dependency3__, RSVP, logger, Version, state, Sandbox, initializeSandbox, Service, iframeAdapter, webworkerAdapter, InlineAdapter) {
     "use strict";
     var assert = __dependency1__.assert;
     var configuration = __dependency2__.configuration;
@@ -1899,7 +2020,8 @@ define("oasis",
 
     Oasis.adapters = {
       iframe: iframeAdapter,
-      webworker: webworkerAdapter
+      webworker: webworkerAdapter,
+      inline: InlineAdapter
     };
 
 
@@ -2231,7 +2353,8 @@ define("oasis/connect",
     function connectPromise(capability) {
       Logger.log("Connecting to '" + capability + "' with promise.");
 
-      var defered = RSVP.defer();
+      var defered = RSVP.defer('connectPromise: ' + capability);
+
       registerHandler(capability, {
         promise: defered.promise,
         setupCapability: function(port) {
@@ -2253,7 +2376,7 @@ define("oasis/connect",
         if (handler) {
           Logger.log("Invoking handler for '" + capability + "'");
 
-          RSVP.resolve(handler.setupCapability(port)).then(function () {
+          RSVP.resolve(handler.setupCapability(port), 'setupCapability:' + capability).then(function () {
             port.start();
           });
         }
@@ -2487,6 +2610,141 @@ define("oasis/iframe_adapter",
 
 
     return iframeAdapter;
+  });
+define("oasis/inline_adapter",
+  ["oasis/util","oasis/config","oasis/shims","oasis/message_channel","rsvp","oasis/logger","oasis/base_adapter"],
+  function(__dependency1__, __dependency2__, __dependency3__, __dependency4__, RSVP, Logger, BaseAdapter) {
+    "use strict";
+    var assert = __dependency1__.assert;
+    var extend = __dependency1__.extend;
+    var configuration = __dependency2__.configuration;
+    var a_forEach = __dependency3__.a_forEach;
+    var PostMessageMessageChannel = __dependency4__.PostMessageMessageChannel;
+    /*global self, postMessage, importScripts */
+
+
+
+    var sessionId = 0;
+
+    function InlineSandbox(options) {
+      // assert a port
+      this.port = options.port;
+
+      this._portsProvidedDefered = RSVP.defer();
+    }
+
+    InlineSandbox.prototype = {
+      waitForPorts: function(){
+        return this._portsProvidedDefered.promise;
+      },
+      port: undefined,
+      _portsProvidedDefered: undefined,
+      portsWhereProvided: function() {
+        this._portsProvidedDefered.resolve(this);
+      }
+    };
+
+    function fetchRuntime(url) {
+      return RSVP.Promise(function(resolve, reject){
+        // TOOD: i don't think oasis has a jQuery dep
+        $.ajax(url, {
+          dataType: 'text',
+          success: function(data){
+            var script = '"use strict";' + data;
+
+            resolve(new Function("Oasis", '_oasisRootElement', script));
+          }, 
+          error: function(jqxhr, status, error) {
+            jqxhr.then = undefined;
+            reject(error || jqxhr);
+          }
+        });
+      }, 'fetchRuntime');
+    }
+
+    var InlineAdapter = extend(BaseAdapter, {
+      //-------------------------------------------------------------------------
+      // Environment API
+
+      initializeSandbox: function(sandbox) {
+        var oasisURL = this.oasisURL(sandbox);
+        sandbox.el = document.createElement('div');
+
+        var channel = new PostMessageMessageChannel();
+
+        this.port = channel.port1;
+
+        sandbox.sandbox = new InlineSandbox({
+          port: channel.port2
+        });
+        sandbox.sessionId = sessionId;
+        sessionId++;
+
+        // phase 2: everything is ready external things to interact with the
+        // sandbox
+        sandbox._waitForLoadDeferral().resolve(sandbox.sandbox.waitForPorts());
+
+        // phase 1: the runtime is ready.
+        return loadRuntime();
+
+        function appendRuntimeToSandbox(runtime) {
+          Logger.log("inline sandbox initialized");
+          // invoke the runtime..
+
+          var Oasis = requireModule('oasis', sandbox.sessionId);
+          Oasis.sessionId = sandbox.sessionId; // debugging/sanity
+          runtime(Oasis, sandbox.el);
+          return sandbox;
+        }
+
+        function loadRuntime() {
+          return new RSVP.Promise(function(resolve, reject) {
+            resolve(fetchRuntime(sandbox.options.url).then(appendRuntimeToSandbox));
+          }, 'loadRuntime');
+        }
+      },
+ 
+      startSandbox: function(sandbox) { },
+
+      terminateSandbox: function(sandbox) {
+        var rootElement = sandbox.rootElement;
+        // cleanup?
+      },
+      oasisLoaded: function() {
+      },
+
+      connectPorts: function(sandbox, ports) {
+        var rawPorts = ports.map(function(port) { return port.port; }),
+            message = this.createInitializationMessage(sandbox);
+
+        // should really be called from within 'sessionId' subgraph
+        var connectCapabilities = requireModule("oasis/connect", sandbox.sessionId).connectCapabilities;
+
+        connectCapabilities(message.capabilities, rawPorts);
+        sandbox.sandbox.portsWhereProvided();
+      },
+
+      connectSandbox: function(ports) {
+        return BaseAdapter.prototype.connectSandbox.call(this, self, ports);
+      },
+
+      //-------------------------------------------------------------------------
+      // Sandbox API
+
+      loadScripts: function (base, scriptURLs) {
+        var hrefs = [];
+        a_forEach.call(scriptURLs, function (scriptURL) {
+          hrefs.push( base + scriptURL );
+        });
+
+        importScripts.apply(undefined, hrefs);
+      }
+    });
+
+    var inlineAdapter = new InlineAdapter();
+
+
+    return inlineAdapter;
   });
 define("oasis/logger",
   [],
@@ -2861,8 +3119,8 @@ define("oasis/sandbox",
       this.options = options;
 
       a_forEach.call(capabilities, function(capability) {
-        this.envPortDefereds[capability] = RSVP.defer();
-        this.sandboxPortDefereds[capability] = RSVP.defer();
+        this.envPortDefereds[capability] = RSVP.defer('envPortPromise: ' + capability);
+        this.sandboxPortDefereds[capability] = RSVP.defer('sandboxPortDeferedsd: ' + capability);
       }, this);
 
       var sandbox = this;
@@ -3018,8 +3276,8 @@ define("oasis/sandbox",
     return OasisSandbox;
   });
 define("oasis/sandbox_init",
-  ["oasis/globals","oasis/iframe_adapter","oasis/webworker_adapter"],
-  function(__dependency1__, iframeAdapter, webworkerAdapter) {
+  ["oasis/globals","oasis/iframe_adapter","oasis/webworker_adapter","oasis/inline_adapter"],
+  function(__dependency1__, iframeAdapter, webworkerAdapter, inlineAdapter) {
     "use strict";
     var ports = __dependency1__.ports;
 
@@ -3041,6 +3299,10 @@ define("oasis/sandbox_init",
 
         if (window.parent && window.parent !== window) {
           iframeAdapter.connectSandbox(ports);
+        } else {
+
+          inlineAdapter.connectSandbox(ports);
+          // inline adapter, or container. Both don't need to be connected
         }
       } else {
         webworkerAdapter.connectSandbox(ports);
@@ -3580,6 +3842,7 @@ define("oasis/webworker_adapter",
 
     return webworkerAdapter;
   });
+
 (function(exports) {exports.Oasis = requireModule('oasis');})(this);
 
 (function(exports, Oasis) {
@@ -3773,6 +4036,10 @@ define("oasis/webworker_adapter",
     this.capabilities = Conductor.capabilities.slice();
   };
 
+  Oasis.adapter.inline.setup({
+    Condcutor: 'conductor' // requireModule
+  });
+
   Conductor.configure = function (name, value) {
     if (/(conductor|oasis)URL/.test(name)) {
       Oasis.config.oasisURL = value;
@@ -3873,6 +4140,7 @@ define("oasis/webworker_adapter",
       }
 
       var sandbox = Conductor.Oasis.createSandbox({
+        adapter: _options.adapter,
         url: url,
         capabilities: capabilities,
         oasisURL: this.conductorURL,
@@ -4074,6 +4342,7 @@ define("oasis/webworker_adapter",
     };
 
     Conductor.Card.prototype = {
+      element: document.body,
       defer: function(callback) {
         var defered = RSVP.defer();
         if (callback) { defered.promise.then(callback).then(null, Conductor.error); }
@@ -4285,19 +4554,20 @@ define("oasis/webworker_adapter",
     return Conductor.Oasis.Consumer.extend({
       initialize: function() {
         var service = this;
+        if (!window.ok) {
+          window.ok = function(bool, message) {
+            service.send('ok', { bool: bool, message: message });
+          };
 
-        window.ok = function(bool, message) {
-          service.send('ok', { bool: bool, message: message });
-        };
+          window.equal = function(expected, actual, message) {
+            service.send('equal', { expected: expected, actual: actual, message: message });
+          };
 
-        window.equal = function(expected, actual, message) {
-          service.send('equal', { expected: expected, actual: actual, message: message });
-        };
-
-        window.start = function() {
-          service.send('start');
-        };
-
+          window.start = function() {
+            service.send('start');
+          };
+        }
+        if (!window.ok)       if (!window.ok)       if (!window.ok) 
         promise.resolve();
       },
 

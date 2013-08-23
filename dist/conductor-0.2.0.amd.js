@@ -191,6 +191,10 @@ define("conductor",
       this.capabilities = Conductor.capabilities.slice();
     };
 
+    Oasis.adapter.inline.setup({
+      Condcutor: 'conductor' // requireModule
+    });
+
     Conductor.configure = function (name, value) {
       if (/(conductor|oasis)URL/.test(name)) {
         Oasis.config.oasisURL = value;
@@ -291,6 +295,7 @@ define("conductor",
         }
 
         var sandbox = Conductor.Oasis.createSandbox({
+          adapter: _options.adapter,
           url: url,
           capabilities: capabilities,
           oasisURL: this.conductorURL,
@@ -492,6 +497,7 @@ define("conductor",
       };
 
       Conductor.Card.prototype = {
+        element: document.body,
         defer: function(callback) {
           var defered = RSVP.defer();
           if (callback) { defered.promise.then(callback).then(null, Conductor.error); }
@@ -703,19 +709,20 @@ define("conductor",
       return Conductor.Oasis.Consumer.extend({
         initialize: function() {
           var service = this;
+          if (!window.ok) {
+            window.ok = function(bool, message) {
+              service.send('ok', { bool: bool, message: message });
+            };
 
-          window.ok = function(bool, message) {
-            service.send('ok', { bool: bool, message: message });
-          };
+            window.equal = function(expected, actual, message) {
+              service.send('equal', { expected: expected, actual: actual, message: message });
+            };
 
-          window.equal = function(expected, actual, message) {
-            service.send('equal', { expected: expected, actual: actual, message: message });
-          };
-
-          window.start = function() {
-            service.send('start');
-          };
-
+            window.start = function() {
+              service.send('start');
+            };
+          }
+          if (!window.ok)       if (!window.ok)       if (!window.ok) 
           promise.resolve();
         },
 

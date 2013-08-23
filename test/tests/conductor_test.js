@@ -26,18 +26,36 @@ test("the conductor will load cards", function() {
 
   equal(document.querySelectorAll('#qunit-fixture iframe').length, 1, "The card is in the DOM");
 });
-test("the conductor will load cards with a specified adapter", function() {
-  expect(2);
+
+function log() {
+  // console.log.apply(console, arguments);
+}
+
+RSVP = Conductor.Oasis.RSVP;
+RSVP.Promise.on('chained',   log);
+RSVP.Promise.on('rejected',  log);
+RSVP.Promise.on('fulfilled', log);
+RSVP.Promise.on('created',   log);
+
+test("the conductor will load cards with a inline adapter", function() {
+  expect(4);
 
   var conductor = new Conductor({ testing: true });
-  var card = conductor.load("/test/fixtures/test_card.js", {adapter: Conductor.Oasis.adapters.inline});
-  card.appendTo(qunitFixture);
+  var card = conductor.load("/test/fixtures/test_card.js", undefined, {
+    adapter: Conductor.Oasis.adapters.inline
+  });
 
-  // Wait for assertion from card
+  ok(card.sandbox.adapter, 'has adapter');
+  equal(card.sandbox.adapter, Conductor.Oasis.adapters.inline, 'has correct adapter');
+
+  card.appendTo(qunitFixture);
   stop();
 
-  equal(document.querySelectorAll('#qunit-fixture iframe').length, 1, "The card is in the DOM");
+  card.promise.then(function(){
+    equal(document.querySelectorAll('#qunit-fixture div').length, 1, "The card is in the DOM");
+  });
 });
+
 test("the conductor can unload cards", function() {
   var conductor = new Conductor({ testing: true }),
       card = conductor.load("/test/fixtures/test_card.js");
@@ -51,7 +69,7 @@ test("the conductor can unload cards", function() {
 
     conductor.unload(card);
 
-    equal(document.querySelectorAll('#qunit-fixture iframe').length, 0, "The card is removed from the DOM");
+    equal(document.querySelectorAll('#qunit-fixture div').length, 0, "The card is removed from the DOM");
 
     start();
   });
